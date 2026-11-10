@@ -1,38 +1,43 @@
-# Matching Doc helper
+# Moon - Matching Helper — 2.0.1
 
-A Tampermonkey widget for MovePay Payment reviews.
+One Tampermonkey script for Payment reviews → TEST, withdrawal time filters, Jira cancellation drafts, and optional BO VIP checks.
 
-## Features
+## Update the Google receiver first (owner only)
 
-- Opens Deposit and withdrawal automatically and previews the reservation details.
-- Saves a HelpDesk ticket link, withdrawal ID, deposit ID, reservation number, deposit client ID, and project to the team's Google Sheet when GO is clicked.
-- The green ФУН button copies the client ID and opens the matching backoffice client page.
+1. In the destination sheet, check columns A–G: Тикеты в онхолде, Айди вывода, Айди депозита, Заявка хаба, Айди клиента, Проект, Сумма. If a manual checkbox was in G, move it to H. Columns H onward are preserved.
+2. Open the Apps Script project used by the existing widget. Back up its code and note its TARGET_ID and TARGET_TAB values.
+3. Replace the code with Google-Sheets.gs from this repository. Replace YOUR_SPREADSHEET_ID and YOUR_SHEET_TAB_NAME with those existing values. The tab name means the bottom sheet tab, not the document title TEST.
+4. Save. Keep the existing MATCHING_SECRET Script Property, project, and connection key.
+5. Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy. Keep the existing execution/access settings and /exec URL.
 
-## Install
+## Update the existing userscript
 
-[Install the widget in Tampermonkey](https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js)
+[Install/update](https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js)
 
-Tampermonkey must already be installed. No GitHub account is needed for this public repository.
+1. Open the existing **MovePay — Ticket to TEST** script in the Tampermonkey editor, replace its entire contents with matching-ticket.user.js, and save. It will be renamed **Moon - Matching Helper**, version **2.0.1**. Updating the existing entry preserves its connection settings. Do not install a second copy through the Raw link for this rename; a changed name can be treated as a different script. The namespace and GitHub update URLs remain unchanged.
+2. Accept the added Jira/backoffice site permissions if prompted.
+3. Disable the separate **Matching Doc Helper — Withdrawals** and old **MovePay Withdrawals — Today** scripts. Leave only the merged helper enabled.
+4. Refresh MovePay; start new Jira drafts and VIP checks rather than reusing old tabs.
 
-1. Install Tampermonkey in your browser.
-2. Open matching-ticket.user.js in this repository and click Raw. If Tampermonkey offers installation, click Install.
-3. Otherwise, copy the entire script, open Tampermonkey → Create a new script, replace the starter code, and save.
-4. Refresh MovePay Payment reviews.
-5. Click ⚙ on the widget. Enter the team's web app URL ending in /exec, then its connection key. Obtain both privately from the owner.
-6. Open a reservation and check the displayed values before your first save.
+## Verify
 
-Each operator enters the connection settings once per browser profile. The owner sets up the Google receiver once; operators do not create their own deployment. Keep the same script installed when updating to preserve its saved settings.
+- Payment reviews: open one reservation. The preview now includes Сумма. Amount to pay `1,000.00 RUB` becomes `1000`; fractional amounts are retained without currency or thousands separators. GO writes A–G.
+- Test a new reservation/ticket combination: existing rows are deduplicated and are not backfilled.
+- Withdrawals: the Time/cancellation widget appears on withdrawal pages. The partial and full cancellation popups retain their different fields. Jira tickets are filled but never automatically submitted.
+- VIP remains optional: open the BO check from the popup, wait for its result, then return to MovePay. Exact VIP → Yes; a readable tag list without VIP → No. Manual selection remains available.
 
-## Private connection details
+## New operators
 
-Never put the connection key or your team's deployment URL in this repository, screenshots, issues, or README. They are supplied separately by the owner. The shared key permits submissions and does not identify individual operators.
+Install Tampermonkey, use the install link, then click ⚙ on Payment reviews. Enter the team's existing /exec URL and connection key privately. Each operator configures their browser once; only the owner deploys the receiver.
 
-## Updates
+## Privacy and compatibility
 
-Tampermonkey checks this repository for updates according to its update settings. You can also use its Check for updates action. Existing saved connection settings remain when updating the same script. Refresh MovePay after an update.
+Do not publish a real connection key, deployment URL, or configured receiver. Google-Sheets.gs in this repository has configuration placeholders. Updating the same installed script preserves the connection and ticket draft. Installing a separate copy may not.
 
-For the owner: upload the updated matching-ticket.user.js to the root of the main branch and increase @version for each release. Keep @name and @namespace unchanged. Update and download addresses are already included in the script.
+The modules use separate routes and element IDs. Review observers/settings run only on MovePay. Jira and BO routines run on their respective domains. Kent checks still open boadmin; the old Kent domain is accepted as an alias.
 
-## Scope
+Duplicates use the ticket, withdrawal, deposit, and reservation combination. Header mismatches block writes. The helper reports an outdated receiver rather than silently claiming Сумма was saved. Deploy the receiver before updating operators.
 
-GO writes the six requested values only. The manual blocking checkbox is not changed. ФУН opens a client page; it does not perform account actions. Website layout changes can require a widget update.
+## Validation
+
+Local tests cover amount parsing, seven-column writes, validation, headers, locking, duplicate checks, preservation of H onward, withdrawal calculations/dates, and BO client matching. The VIP selector was tested live on R7 and Kent. The merged installation and new deployment still require a live first save.
