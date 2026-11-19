@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Moon - Matching Helper
 // @namespace    local.movepay.matching
-// @version      2.0.3
+// @version      2.0.4
 // @homepageURL  https://github.com/akintomoon/Matching-Doc-Helper
 // @updateURL    https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
 // @downloadURL  https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
@@ -41,6 +41,7 @@
   let current = null;
   let ui;
   let activePanel = null;
+  let comparison = null;
   const openingAttempts = new WeakMap();
 
   function normalizeTicket(value) {
@@ -194,6 +195,95 @@
     return url.href;
   }
 
+  function parsePayee(text) {
+    const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const start = lines.indexOf('Payee');
+    const labels = ['Requisite type', 'Recipient name', 'Phone number', 'Bank'];
+    const result = {};
+    for (const label of labels) {
+      const found = lines.slice(start + 1).filter(line => line === label);
+      const index = start < 0 || found.length !== 1 ? -1 : lines.indexOf(label, start + 1);
+      const value = index < 0 ? '' : lines[index + 1] || '';
+      result[label] = labels.includes(value) || /^(SHOW IN FULL|HIDE)$/i.test(value) ? '' : value;
+    }
+    return result;
+  }
+
+  function phoneDigits(value) {
+    // Only formatting is ignored. Masked, partial and mixed text never confirm a match.
+    const text = String(value || '').trim();
+    if (!/^\+?[\d\s().-]+$/.test(text)) return null;
+    const digits = text.replace(/\D/g, '');
+    return /^\d{10,15}$/.test(digits) ? digits : null;
+  }
+
+  function comparePhones(payee, receipt) {
+    const left = phoneDigits(payee), right = phoneDigits(receipt);
+    return {left, right, state: !left || !right ? 'unknown' : left === right ? 'match' : 'different'};
+  }
+
+  function closeComparison() {
+    if (!comparison) return;
+    const previous = comparison; comparison = null;
+    previous.dialog.close(); previous.host.remove();
+  }
+
+  function showComparison(record, receipt) {
+    closeComparison();
+    const host = document.createElement('div');
+    const root = host.attachShadow({mode:'closed'});
+    root.innerHTML = `<style>
+      *{box-sizing:border-box}dialog{width:1200px;max-width:96vw;height:86vh;max-height:94vh;border:1px solid #526381;border-radius:12px;padding:16px;background:#202638;color:#eaf0ff;font:15px system-ui}dialog::backdrop{background:#0009}header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}h2{font-size:19px;margin:0}.layout{display:grid;grid-template-columns:minmax(270px, .8fr) minmax(300px,1.2fr);gap:18px;height:calc(100% - 48px)}.info{overflow:auto}label{display:block;color:#c7d7f1;margin:14px 0 6px}.value{font-size:22px;font-weight:650;overflow-wrap:anywhere}input{width:100%;padding:12px;border:1px solid #71829d;border-radius:7px;font:20px monospace;color:white;background:#131a29}button,a{font:600 14px system-ui}button{cursor:pointer;border:0;border-radius:6px;padding:9px 12px;background:#8bb9ff;color:#111827}a{color:#a8ceff}.result{padding:12px;margin-top:12px;border:1px solid #71829d;border-radius:7px}.result[data-state=match]{color:#80eba4}.result[data-state=different]{color:#ff9ba7}.digits{font:20px monospace;overflow-wrap:anywhere}.digits mark{background:#8a293c;color:white}p{line-height:1.4}.note{font-size:13px;color:#bdcbe1}.receipt{display:flex;flex-direction:column;min-height:0;gap:8px}iframe{flex:1;width:100%;min-height:300px;background:white;border:0;border-radius:6px}@media(max-width:750px){.layout{display:flex;flex-direction:column;height:auto}.info{overflow:visible}iframe{height:55vh;flex:auto}}
+    </style><dialog aria-label="Сверка реквизитов"><header><h2></h2><button class="close" type="button">Закрыть</button></header><div class="layout"><div class="info"><div class="fields"></div><button class="reload" type="button">Обновить данные Payee</button><label for="receipt-phone">Телефон получателя из чека</label><input id="receipt-phone" autocomplete="off" placeholder="Вставьте номер из чека"><div class="result" role="status" aria-live="polite"></div><div class="digits"></div><p class="note">Сравниваются только полные номера. Пробелы, +, скобки и дефисы не учитываются. Имя и банк проверьте по чеку вручную.</p></div><div class="receipt"><a target="_blank" rel="noopener noreferrer">Открыть чек отдельно ↗</a><span class="note">Если предпросмотр пуст или сайт запрещает его показ, откройте чек отдельно.</span><iframe title="Предпросмотр чека" referrerpolicy="no-referrer"></iframe></div></div></dialog>`;
+    const dialog = root.querySelector('dialog');
+    root.querySelector('h2').textContent = 'Сверка · Reservation #' + record.reservation;
+    const input = root.querySelector('input');
+    let payee = parsePayee(activePanel.innerText);
+    function updateResult() {
+      const result = comparePhones(payee['Phone number'], input.value);
+      const box = root.querySelector('.result'); box.dataset.state = result.state;
+      box.textContent = result.state === 'match' ? 'Совпадает: полный номер' : result.state === 'different' ? 'Не совпадает' : 'Недостаточно данных — нужен полный номер Payee и номер из чека';
+      const digits = root.querySelector('.digits'); digits.replaceChildren();
+      if (result.state === 'unknown') return;
+      for (const [label, value, other] of [['Payee: ',result.left,result.right],['Чек: ',result.right,result.left]]) {
+        const line = document.createElement('p'); line.append(document.createTextNode(label));
+        [...value].forEach((char,i) => { const span = document.createElement(char === other[i] ? 'span' : 'mark'); span.textContent = char; line.append(span); });
+        digits.append(line);
+      }
+    }
+    function renderFields() {
+      const fields = root.querySelector('.fields'); fields.replaceChildren();
+      for (const label of ['Recipient name','Phone number','Bank']) {
+        const caption = document.createElement('label'); caption.textContent = label;
+        const value = document.createElement('div'); value.className = 'value'; value.textContent = payee[label] || 'Не удалось прочитать';
+        fields.append(caption,value);
+      }
+      updateResult();
+    }
+    root.querySelector('.reload').onclick = () => {
+      try {
+        const fresh = readReservation();
+        if (JSON.stringify(fresh) !== JSON.stringify(record)) { closeComparison(); return; }
+        payee = parsePayee(activePanel.innerText); renderFields();
+      } catch (_) { closeComparison(); }
+    };
+    root.querySelector('.close').onclick = closeComparison;
+    dialog.addEventListener('cancel', e => { e.preventDefault(); closeComparison(); });
+    input.addEventListener('input', updateResult);
+    root.querySelector('a').href = receipt;
+    root.querySelector('iframe').src = receipt;
+    renderFields(); document.body.append(host);
+    comparison = {host,dialog,record:JSON.stringify(record)}; dialog.showModal();
+  }
+
+  function openComparisonOnly() {
+    try {
+      const record = readReservation();
+      if (!current || JSON.stringify(record) !== JSON.stringify(current)) throw new Error('Reservation changed. Try again.');
+      showComparison(record, receiptURL(activePanel));
+    } catch (error) { ui.status.textContent = error.message; }
+  }
+
   function openBackoffice(withReceipt = false) {
     if (busy) return;
     try {
@@ -206,9 +296,11 @@
       const url = backofficeURL(detected);
       const receipt = withReceipt ? receiptURL(activePanel) : null;
       GM_setClipboard(detected.client, 'text');
-      if (receipt) GM_openInTab(receipt, {active:false, insert:true, setParent:true});
-      GM_openInTab(url, {active:true, insert:true, setParent:true});
-      ui.status.textContent = 'Client ID copied · opened ' + detected.project + (receipt ? ' · receipt opened in background' : '');
+      if (receipt) showComparison(detected, receipt);
+      // Append in explicit order: receipt left, Fundist right; keep MovePay selected.
+      if (receipt) GM_openInTab(receipt, {active:false, insert:false, setParent:true});
+      GM_openInTab(url, {active:!withReceipt, insert:!withReceipt, setParent:true});
+      ui.status.textContent = 'Client ID copied · opened ' + detected.project + (receipt ? ' · чек и Фундист открыты в фоне' : '');
     } catch (error) { ui.status.textContent = error.message; }
   }
 
@@ -279,21 +371,22 @@
       form{display:flex;gap:6px;margin:0} input{flex:1;min-width:0;background:#131a29;color:#fff;border:1px solid #526381;border-radius:6px;padding:8px}
       button{border:0;border-radius:6px;padding:7px 11px;cursor:pointer;font:600 12px system-ui;background:#8bb9ff;color:#111827}button:disabled{opacity:.5;cursor:default}
       .settings{background:#35425a;color:white;padding:7px} .details{display:flex;align-items:center;gap:7px;margin-top:6px;flex-wrap:wrap}.preview{flex:1 1 180px;margin:0;font-size:12px;line-height:1.4;color:#c7d7f1;min-width:0;overflow-wrap:anywhere}.actions{display:flex;gap:6px;flex-wrap:wrap}.fun,.check{flex-shrink:0;font-size:13px;padding:8px 10px}.fun{background:#65d68a;color:#102719}.check{background:#f4cb57;color:#27200a} .status{margin:4px 0 0;font-size:11px;overflow-wrap:anywhere} :focus-visible{outline:2px solid #fff;outline-offset:2px}
-    </style><section aria-label="Save matching ticket"><form><input aria-label="HelpDesk ticket link" placeholder="Paste ticket link…" type="url" required><button class="go" type="submit">GO</button><button class="settings" type="button" title="Connection settings" aria-label="Connection settings">⚙</button></form><div class="details"><p class="preview"></p><div class="actions"><button class="fun" type="button" disabled title="Copy client ID and open backoffice">ФУНДИСТ</button><button class="check" type="button" disabled title="Open Fundist in front and receipt in background">ПРОВЕРИТЬ</button></div></div><p class="status" role="status" aria-live="polite"></p></section>`;
-    ui = {host, ticket:root.querySelector('input'), go:root.querySelector('.go'), fun:root.querySelector('.fun'), check:root.querySelector('.check'), preview:root.querySelector('.preview'), status:root.querySelector('.status')};
+    </style><section aria-label="Save matching ticket"><form><input aria-label="HelpDesk ticket link" placeholder="Paste ticket link…" type="url" required><button class="go" type="submit">GO</button><button class="settings" type="button" title="Connection settings" aria-label="Connection settings">⚙</button></form><div class="details"><p class="preview"></p><div class="actions"><button class="fun" type="button" disabled title="Copy client ID and open backoffice">ФУНДИСТ</button><button class="check" type="button" disabled title="Open receipt and Fundist in background; compare Payee">ПРОВЕРИТЬ</button><button class="compare" type="button" disabled>СВЕРИТЬ</button></div></div><p class="status" role="status" aria-live="polite"></p></section>`;
+    ui = {host, ticket:root.querySelector('input'), go:root.querySelector('.go'), fun:root.querySelector('.fun'), check:root.querySelector('.check'), compare:root.querySelector('.compare'), preview:root.querySelector('.preview'), status:root.querySelector('.status')};
     ui.ticket.value = GM_getValue('draft', '');
     ui.ticket.addEventListener('input', () => GM_setValue('draft', ui.ticket.value));
     root.querySelector('form').addEventListener('submit', e => { e.preventDefault(); save(); });
     root.querySelector('.settings').addEventListener('click', settings);
     ui.fun.addEventListener('click', () => openBackoffice());
     ui.check.addEventListener('click', () => openBackoffice(true));
+    ui.compare.addEventListener('click', openComparisonOnly);
     document.body.append(host);
   }
 
   function refresh() {
     if (!document.body) return;
     const onPage = location.pathname.replace(/\/$/, '') === ROUTE;
-    if (!onPage) { if (ui) ui.host.hidden = true; current = null; return; }
+    if (!onPage) { closeComparison(); if (ui) ui.host.hidden = true; current = null; return; }
     mount(); ui.host.hidden = false;
     try {
       current = readReservation();
@@ -305,11 +398,11 @@
       try {
         backofficeURL(current);
         ui.fun.disabled = busy;
-        ui.check.disabled = busy;
+        ui.check.disabled = busy; ui.compare.disabled = busy;
         ui.fun.title = 'Copy client ID and open ' + current.project + ' backoffice';
       } catch (error) {
         ui.fun.disabled = true;
-        ui.check.disabled = true;
+        ui.check.disabled = true; ui.compare.disabled = true;
         ui.fun.title = error.message;
       }
     } catch (error) {
@@ -319,7 +412,7 @@
       if (ui.preview.textContent !== error.message) ui.preview.textContent = error.message;
       ui.go.disabled = true;
       ui.fun.disabled = true;
-      ui.check.disabled = true;
+      ui.check.disabled = true; ui.compare.disabled = true;
     }
   }
 

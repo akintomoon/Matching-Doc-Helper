@@ -1,8 +1,18 @@
-# Moon - Matching Helper — 2.0.3
+# Moon - Matching Helper — 2.0.4
 
 One Tampermonkey script for Payment reviews → TEST, withdrawal time filters, Jira cancellation drafts, and optional BO VIP checks.
 
-## Updating to 2.0.3
+## Updating to 2.0.4
+
+- ПРОВЕРИТЬ opens a comparison panel on MovePay and appends two background tabs: receipt on the left, Fundist on the right. MovePay keeps focus.
+- СВЕРИТЬ opens just the panel without creating extra tabs. ФУНДИСТ alone still opens the backoffice in front.
+- The panel displays Recipient name, Phone number and Bank in large text beside an embedded receipt preview.
+- Paste the receipt recipient phone into the comparison field. Formatting (+, spaces, brackets, hyphens) is ignored; differing digits are highlighted. Masked, partial or invalid numbers never confirm a match. Leading 8 and 7 are not silently treated as equal. Name and bank are visual checks only.
+- If Payee was still loading, use Обновить данные Payee. The panel closes if the reservation changes.
+- Some receipt hosts or PDF viewers may block embedding. Use Открыть чек отдельно when the preview is blank. No external OCR service is used, and comparison data is not saved or sent to Google Sheets.
+- Update the existing entry, then refresh MovePay. Document keys and connection settings are preserved; no Google receiver changes.
+
+## Previous update: 2.0.3
 
 - Larger green **ФУНДИСТ** button: copies the client ID and opens their backoffice.
 - Yellow **ПРОВЕРИТЬ** button beside it: opens the current reservation receipt in a background tab, then activates Fundist. It does not compare receipt details automatically.
