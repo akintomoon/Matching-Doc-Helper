@@ -1,8 +1,15 @@
-# Moon - Matching Helper — 2.0.2
+# Moon - Matching Helper — 2.0.3
 
 One Tampermonkey script for Payment reviews → TEST, withdrawal time filters, Jira cancellation drafts, and optional BO VIP checks.
 
-## Updating from 2.0.1 to 2.0.2
+## Updating to 2.0.3
+
+- Larger green **ФУНДИСТ** button: copies the client ID and opens their backoffice.
+- Yellow **ПРОВЕРИТЬ** button beside it: opens the current reservation receipt in a background tab, then activates Fundist. It does not compare receipt details automatically.
+- If the receipt link is missing or ambiguous, the helper reports the problem instead of opening an unrelated receipt.
+- Update the existing Tampermonkey entry and refresh MovePay. Your document URL, key and drafts remain saved; no Google receiver changes are needed.
+
+## Previous update: 2.0.2
 
 Update the existing **Moon - Matching Helper** entry in Tampermonkey, then refresh MovePay. Saved document URL, connection key and drafts are preserved. No Google Apps Script changes or redeployment are needed for this update.
 

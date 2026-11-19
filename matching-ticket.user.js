@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Moon - Matching Helper
 // @namespace    local.movepay.matching
-// @version      2.0.2
+// @version      2.0.3
 // @homepageURL  https://github.com/akintomoon/Matching-Doc-Helper
 // @updateURL    https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
 // @downloadURL  https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
@@ -186,19 +186,29 @@
     return 'https://' + hosts[project] + '.boadmin.org/ru/Users/Summary/' + record.client;
   }
 
-  function openBackoffice() {
+  function receiptURL(panel) {
+    const links = [...panel.querySelectorAll('a[href]')].filter(e => visible(e) && e.textContent.trim() === 'Open the receipt file');
+    if (links.length !== 1) throw new Error('Cannot find one receipt link in this reservation.');
+    const url = new URL(links[0].href, location.href);
+    if (!['https:', 'blob:'].includes(url.protocol)) throw new Error('Unsupported receipt link. Open the receipt manually.');
+    return url.href;
+  }
+
+  function openBackoffice(withReceipt = false) {
     if (busy) return;
     try {
       if (location.pathname.replace(/\/$/, '') !== ROUTE) throw new Error('Open Payment reviews first.');
       const detected = readReservation();
       if (!current || JSON.stringify(current) !== JSON.stringify(detected)) {
         refresh();
-        throw new Error('Reservation changed. Check the preview, then press ФУН again.');
+        throw new Error('Reservation changed. Check the preview, then try again.');
       }
       const url = backofficeURL(detected);
+      const receipt = withReceipt ? receiptURL(activePanel) : null;
       GM_setClipboard(detected.client, 'text');
+      if (receipt) GM_openInTab(receipt, {active:false, insert:true, setParent:true});
       GM_openInTab(url, {active:true, insert:true, setParent:true});
-      ui.status.textContent = 'Client ID copied · opened ' + detected.project;
+      ui.status.textContent = 'Client ID copied · opened ' + detected.project + (receipt ? ' · receipt opened in background' : '');
     } catch (error) { ui.status.textContent = error.message; }
   }
 
@@ -268,14 +278,15 @@
       section{font:12px system-ui,sans-serif;color:#eaf0ff;background:#202638;border:1px solid #526381;border-radius:12px;padding:8px 10px;box-shadow:0 5px 22px #0006;width:440px;max-width:calc(100vw - 20px)}
       form{display:flex;gap:6px;margin:0} input{flex:1;min-width:0;background:#131a29;color:#fff;border:1px solid #526381;border-radius:6px;padding:8px}
       button{border:0;border-radius:6px;padding:7px 11px;cursor:pointer;font:600 12px system-ui;background:#8bb9ff;color:#111827}button:disabled{opacity:.5;cursor:default}
-      .settings{background:#35425a;color:white;padding:7px} .details{display:flex;align-items:center;gap:7px;margin-top:6px}.preview{margin:0;font-size:12px;line-height:1.4;color:#c7d7f1;min-width:0;overflow-wrap:anywhere}.fun{flex-shrink:0;background:#65d68a;color:#102719;padding:4px 7px} .status{margin:4px 0 0;font-size:11px;overflow-wrap:anywhere} :focus-visible{outline:2px solid #fff;outline-offset:2px}
-    </style><section aria-label="Save matching ticket"><form><input aria-label="HelpDesk ticket link" placeholder="Paste ticket link…" type="url" required><button class="go" type="submit">GO</button><button class="settings" type="button" title="Connection settings" aria-label="Connection settings">⚙</button></form><div class="details"><p class="preview"></p><button class="fun" type="button" disabled title="Copy client ID and open backoffice">ФУН</button></div><p class="status" role="status" aria-live="polite"></p></section>`;
-    ui = {host, ticket:root.querySelector('input'), go:root.querySelector('.go'), fun:root.querySelector('.fun'), preview:root.querySelector('.preview'), status:root.querySelector('.status')};
+      .settings{background:#35425a;color:white;padding:7px} .details{display:flex;align-items:center;gap:7px;margin-top:6px;flex-wrap:wrap}.preview{flex:1 1 180px;margin:0;font-size:12px;line-height:1.4;color:#c7d7f1;min-width:0;overflow-wrap:anywhere}.actions{display:flex;gap:6px;flex-wrap:wrap}.fun,.check{flex-shrink:0;font-size:13px;padding:8px 10px}.fun{background:#65d68a;color:#102719}.check{background:#f4cb57;color:#27200a} .status{margin:4px 0 0;font-size:11px;overflow-wrap:anywhere} :focus-visible{outline:2px solid #fff;outline-offset:2px}
+    </style><section aria-label="Save matching ticket"><form><input aria-label="HelpDesk ticket link" placeholder="Paste ticket link…" type="url" required><button class="go" type="submit">GO</button><button class="settings" type="button" title="Connection settings" aria-label="Connection settings">⚙</button></form><div class="details"><p class="preview"></p><div class="actions"><button class="fun" type="button" disabled title="Copy client ID and open backoffice">ФУНДИСТ</button><button class="check" type="button" disabled title="Open Fundist in front and receipt in background">ПРОВЕРИТЬ</button></div></div><p class="status" role="status" aria-live="polite"></p></section>`;
+    ui = {host, ticket:root.querySelector('input'), go:root.querySelector('.go'), fun:root.querySelector('.fun'), check:root.querySelector('.check'), preview:root.querySelector('.preview'), status:root.querySelector('.status')};
     ui.ticket.value = GM_getValue('draft', '');
     ui.ticket.addEventListener('input', () => GM_setValue('draft', ui.ticket.value));
     root.querySelector('form').addEventListener('submit', e => { e.preventDefault(); save(); });
     root.querySelector('.settings').addEventListener('click', settings);
-    ui.fun.addEventListener('click', openBackoffice);
+    ui.fun.addEventListener('click', () => openBackoffice());
+    ui.check.addEventListener('click', () => openBackoffice(true));
     document.body.append(host);
   }
 
@@ -294,9 +305,11 @@
       try {
         backofficeURL(current);
         ui.fun.disabled = busy;
+        ui.check.disabled = busy;
         ui.fun.title = 'Copy client ID and open ' + current.project + ' backoffice';
       } catch (error) {
         ui.fun.disabled = true;
+        ui.check.disabled = true;
         ui.fun.title = error.message;
       }
     } catch (error) {
@@ -306,6 +319,7 @@
       if (ui.preview.textContent !== error.message) ui.preview.textContent = error.message;
       ui.go.disabled = true;
       ui.fun.disabled = true;
+      ui.check.disabled = true;
     }
   }
 
