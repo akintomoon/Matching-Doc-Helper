@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Moon - Matching Helper
 // @namespace    local.movepay.matching
-// @version      2.0.1
+// @version      2.0.2
 // @homepageURL  https://github.com/akintomoon/Matching-Doc-Helper
 // @updateURL    https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
 // @downloadURL  https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
@@ -54,6 +54,11 @@
 
   function visible(element) {
     return element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden';
+  }
+
+  function normalizeProject(value) {
+    const name = String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    return /^(?:cat|cc|cat casino)(?:\s*\(cc\))?$/.test(name) ? 'cat' : name;
   }
 
   function normalizeDepositAmount(raw) {
@@ -121,6 +126,39 @@
     [100, 400, 1000, 2000].forEach(delay => setTimeout(refresh, delay));
   }
 
+  function expandPayee(panel, reservation) {
+    const matches = [...panel.querySelectorAll('*')]
+      .filter(e => visible(e) && e.textContent.trim() === 'Payee');
+    const headers = matches.filter(e => !matches.includes(e.parentElement));
+    if (headers.length !== 1) return;
+    const header = headers[0];
+    const control = header.closest('button,[role="button"],summary,[aria-expanded]') || header;
+    // Find the smallest Payee container, without crossing into other sections.
+    let section = control.parentElement;
+    while (section && section !== panel && !/Requisite type|SHOW IN FULL/i.test(section.innerText || '')) {
+      section = section.parentElement;
+    }
+    const scoped = section && section !== panel && !/Deposit and withdrawal/.test(section.innerText || '');
+    const state = control.getAttribute('aria-expanded');
+    const details = control.closest('details');
+    const isOpen = state === 'true' || (details && details.open) || (scoped && /Requisite type|SHOW IN FULL/i.test(section.innerText));
+    if (!isOpen && openingAttempts.get(control) !== reservation) {
+      openingAttempts.set(control, reservation);
+      control.click();
+      [100, 400, 1000, 2000].forEach(delay => setTimeout(refresh, delay));
+      return;
+    }
+    if (!scoped) return;
+    const buttons = [...section.querySelectorAll('*')]
+      .filter(e => visible(e) && /^SHOW IN FULL$/i.test(e.textContent.trim()));
+    const unique = buttons.filter(e => !buttons.includes(e.parentElement));
+    if (unique.length !== 1) return;
+    const button = unique[0];
+    if (openingAttempts.get(button) === reservation) return;
+    openingAttempts.set(button, reservation);
+    button.click();
+  }
+
   function readReservation() {
     activePanel = null;
     const headings = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]')]
@@ -134,6 +172,7 @@
       // Stop at the first enclosing panel even if details are missing.
       activePanel = panel;
       expandDetails(panel, reservation);
+      expandPayee(panel, reservation);
       return {reservation, ...parseReservationText(panel.innerText)};
     }
     throw new Error('Open “Deposit and withdrawal” in the reservation.');
@@ -141,7 +180,7 @@
 
   function backofficeURL(record) {
     const hosts = {cat:'cc', daddy:'dy', r7:'rs', gama:'gm', kent:'kn', kometa:'kt', arkada:'ak'};
-    const project = String(record.project || '').trim().toLowerCase();
+    const project = normalizeProject(record.project);
     if (!Object.prototype.hasOwnProperty.call(hosts, project)) throw new Error('No backoffice configured for this project.');
     if (typeof record.client !== 'string' || !/^\d{1,30}$/.test(record.client)) throw new Error('Cannot read the client ID.');
     return 'https://' + hosts[project] + '.boadmin.org/ru/Users/Summary/' + record.client;
@@ -288,8 +327,12 @@
   const ID = 'matching-withdrawals-helper';
   const PM_TAG = 'HUBBLEPAY_SBP_RUB_PAY_OUT';
   const BO_HOSTS = {cat:'cc',gama:'gm',daddy:'dy',mers:'mr',r7:'rs',kent:'kn',kometa:'kt',arkada:'ak'};
+  function normalizeProject(value) {
+    const name = String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    return /^(?:cat|cc|cat casino)(?:\s*\(cc\))?$/.test(name) ? 'cat' : name;
+  }
   function profileURL(project, client) {
-    const name = project.trim().toLowerCase();
+    const name = normalizeProject(project);
     const host = Object.hasOwn(BO_HOSTS, name) ? BO_HOSTS[name] : null;
     if (!host || !/^\d+$/.test(client)) throw new Error('Проверьте Project и Player ID');
     return `https://${host}.boadmin.org/ru/Users/Summary/${client}`;
@@ -431,7 +474,7 @@
     });
     const collect = () => {
       const d = Object.fromEntries(Object.entries(fields).map(([k, el]) => [k, el.value.trim()]));
-      d.project = PROJECTS.find(p => p.toLowerCase() === d.project.toLowerCase()) || d.project;
+      d.project = PROJECTS.find(p => p.toLowerCase() === normalizeProject(d.project)) || d.project;
       d.method = PM_TAG;
       if (!/^\d+$/.test(d.client) || !/^\d+$/.test(d.psp)) throw new Error('Проверьте Player ID и Токен PSP');
       if (d.psp !== withdrawal) throw new Error('Токен PSP не совпадает с открытой заявкой');

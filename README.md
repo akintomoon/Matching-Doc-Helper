@@ -1,8 +1,15 @@
-# Moon - Matching Helper — 2.0.1
+# Moon - Matching Helper — 2.0.2
 
 One Tampermonkey script for Payment reviews → TEST, withdrawal time filters, Jira cancellation drafts, and optional BO VIP checks.
 
-## Update the Google receiver first (owner only)
+## Updating from 2.0.1 to 2.0.2
+
+Update the existing **Moon - Matching Helper** entry in Tampermonkey, then refresh MovePay. Saved document URL, connection key and drafts are preserved. No Google Apps Script changes or redeployment are needed for this update.
+
+- Cat aliases: cat, cc, Cat casino and Cat casino (cc) open the Cat backoffice, including optional withdrawal VIP checks.
+- Opening a reservation expands Payee and clicks SHOW IN FULL within that section once per rendered control and reservation.
+
+## Initial merged-version setup: Google receiver (owner only)
 
 1. In the destination sheet, check columns A–G: Тикеты в онхолде, Айди вывода, Айди депозита, Заявка хаба, Айди клиента, Проект, Сумма. If a manual checkbox was in G, move it to H. Columns H onward are preserved.
 2. Open the Apps Script project used by the existing widget. Back up its code and note its TARGET_ID and TARGET_TAB values.
