@@ -1,8 +1,16 @@
-# Moon - Matching Helper — 2.0.4
+# Moon - Matching Helper — 2.0.5
 
 One Tampermonkey script for Payment reviews → TEST, withdrawal time filters, Jira cancellation drafts, and optional BO VIP checks.
 
-## Updating to 2.0.4
+## Updating to 2.0.5
+
+- Fix collapsed Payee selection by clicking its inner label rather than its non-interactive wrapper; retry briefly while it renders. SHOW IN FULL remains automatic.
+- ПРОВЕРИТЬ only opens receipt and Fundist in background tabs next to MovePay (receipt first visually). It no longer opens the comparison panel.
+- СВЕРИТЬ alone opens the panel. Payee data refreshes as it becomes available.
+- Wider receipt preview with Развернуть чек / свойства PDF: hide the comparison column, then use the PDF viewer's ⋮ → Document properties menu. The script cannot directly control the browser's PDF menu.
+- Update the same installed entry and refresh MovePay. Connection settings and Google receiver remain unchanged.
+
+## Previous update: 2.0.4
 
 - ПРОВЕРИТЬ opens a comparison panel on MovePay and appends two background tabs: receipt on the left, Fundist on the right. MovePay keeps focus.
 - СВЕРИТЬ opens just the panel without creating extra tabs. ФУНДИСТ alone still opens the backoffice in front.

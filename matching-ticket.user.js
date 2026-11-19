@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Moon - Matching Helper
 // @namespace    local.movepay.matching
-// @version      2.0.4
+// @version      2.0.5
 // @homepageURL  https://github.com/akintomoon/Matching-Doc-Helper
 // @updateURL    https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
 // @downloadURL  https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
@@ -43,6 +43,7 @@
   let activePanel = null;
   let comparison = null;
   const openingAttempts = new WeakMap();
+  const payeeAttempts = new WeakMap();
 
   function normalizeTicket(value) {
     const url = new URL(value.trim());
@@ -130,10 +131,11 @@
   function expandPayee(panel, reservation) {
     const matches = [...panel.querySelectorAll('*')]
       .filter(e => visible(e) && e.textContent.trim() === 'Payee');
-    const headers = matches.filter(e => !matches.includes(e.parentElement));
+    const headers = matches.filter(e => !matches.some(other => other !== e && e.contains(other)));
     if (headers.length !== 1) return;
     const header = headers[0];
-    const control = header.closest('button,[role="button"],summary,[aria-expanded]') || header;
+    const semantic = header.closest('button,[role="button"],summary,[aria-expanded]');
+    const control = semantic && semantic.textContent.trim() === 'Payee' ? semantic : header;
     // Find the smallest Payee container, without crossing into other sections.
     let section = control.parentElement;
     while (section && section !== panel && !/Requisite type|SHOW IN FULL/i.test(section.innerText || '')) {
@@ -143,8 +145,9 @@
     const state = control.getAttribute('aria-expanded');
     const details = control.closest('details');
     const isOpen = state === 'true' || (details && details.open) || (scoped && /Requisite type|SHOW IN FULL/i.test(section.innerText));
-    if (!isOpen && openingAttempts.get(control) !== reservation) {
-      openingAttempts.set(control, reservation);
+    const attempt = payeeAttempts.get(control);
+    if (!isOpen && (!attempt || attempt.reservation !== reservation || (attempt.count < 3 && Date.now() - attempt.time > 700))) {
+      payeeAttempts.set(control, {reservation, count:attempt?.reservation === reservation ? attempt.count + 1 : 1, time:Date.now()});
       control.click();
       [100, 400, 1000, 2000].forEach(delay => setTimeout(refresh, delay));
       return;
@@ -152,7 +155,7 @@
     if (!scoped) return;
     const buttons = [...section.querySelectorAll('*')]
       .filter(e => visible(e) && /^SHOW IN FULL$/i.test(e.textContent.trim()));
-    const unique = buttons.filter(e => !buttons.includes(e.parentElement));
+    const unique = buttons.filter(e => !buttons.some(other => other !== e && e.contains(other)));
     if (unique.length !== 1) return;
     const button = unique[0];
     if (openingAttempts.get(button) === reservation) return;
@@ -233,8 +236,8 @@
     const host = document.createElement('div');
     const root = host.attachShadow({mode:'closed'});
     root.innerHTML = `<style>
-      *{box-sizing:border-box}dialog{width:1200px;max-width:96vw;height:86vh;max-height:94vh;border:1px solid #526381;border-radius:12px;padding:16px;background:#202638;color:#eaf0ff;font:15px system-ui}dialog::backdrop{background:#0009}header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}h2{font-size:19px;margin:0}.layout{display:grid;grid-template-columns:minmax(270px, .8fr) minmax(300px,1.2fr);gap:18px;height:calc(100% - 48px)}.info{overflow:auto}label{display:block;color:#c7d7f1;margin:14px 0 6px}.value{font-size:22px;font-weight:650;overflow-wrap:anywhere}input{width:100%;padding:12px;border:1px solid #71829d;border-radius:7px;font:20px monospace;color:white;background:#131a29}button,a{font:600 14px system-ui}button{cursor:pointer;border:0;border-radius:6px;padding:9px 12px;background:#8bb9ff;color:#111827}a{color:#a8ceff}.result{padding:12px;margin-top:12px;border:1px solid #71829d;border-radius:7px}.result[data-state=match]{color:#80eba4}.result[data-state=different]{color:#ff9ba7}.digits{font:20px monospace;overflow-wrap:anywhere}.digits mark{background:#8a293c;color:white}p{line-height:1.4}.note{font-size:13px;color:#bdcbe1}.receipt{display:flex;flex-direction:column;min-height:0;gap:8px}iframe{flex:1;width:100%;min-height:300px;background:white;border:0;border-radius:6px}@media(max-width:750px){.layout{display:flex;flex-direction:column;height:auto}.info{overflow:visible}iframe{height:55vh;flex:auto}}
-    </style><dialog aria-label="Сверка реквизитов"><header><h2></h2><button class="close" type="button">Закрыть</button></header><div class="layout"><div class="info"><div class="fields"></div><button class="reload" type="button">Обновить данные Payee</button><label for="receipt-phone">Телефон получателя из чека</label><input id="receipt-phone" autocomplete="off" placeholder="Вставьте номер из чека"><div class="result" role="status" aria-live="polite"></div><div class="digits"></div><p class="note">Сравниваются только полные номера. Пробелы, +, скобки и дефисы не учитываются. Имя и банк проверьте по чеку вручную.</p></div><div class="receipt"><a target="_blank" rel="noopener noreferrer">Открыть чек отдельно ↗</a><span class="note">Если предпросмотр пуст или сайт запрещает его показ, откройте чек отдельно.</span><iframe title="Предпросмотр чека" referrerpolicy="no-referrer"></iframe></div></div></dialog>`;
+      *{box-sizing:border-box}dialog{width:96vw;max-width:96vw;height:86vh;max-height:94vh;border:1px solid #526381;border-radius:12px;padding:16px;background:#202638;color:#eaf0ff;font:15px system-ui}dialog::backdrop{background:#0009}header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}h2{font-size:19px;margin:0}.layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;height:calc(100% - 48px)}.info{overflow:auto}label{display:block;color:#c7d7f1;margin:14px 0 6px}.value{font-size:22px;font-weight:650;overflow-wrap:anywhere}input{width:100%;padding:12px;border:1px solid #71829d;border-radius:7px;font:20px monospace;color:white;background:#131a29}button,a{font:600 14px system-ui}button{cursor:pointer;border:0;border-radius:6px;padding:9px 12px;background:#8bb9ff;color:#111827}a{color:#a8ceff}.result{padding:12px;margin-top:12px;border:1px solid #71829d;border-radius:7px}.result[data-state=match]{color:#80eba4}.result[data-state=different]{color:#ff9ba7}.digits{font:20px monospace;overflow-wrap:anywhere}.digits mark{background:#8a293c;color:white}p{line-height:1.4}.note{font-size:13px;color:#bdcbe1}.layout.wide{grid-template-columns:1fr}.layout.wide .info{display:none}.receipt{min-width:0;display:flex;flex-direction:column;min-height:0;gap:8px}iframe{flex:1;width:100%;min-height:300px;background:white;border:0;border-radius:6px}@media(max-width:750px){.layout{display:flex;flex-direction:column;height:auto}.info{overflow:visible}iframe{height:55vh;flex:auto}}
+    </style><dialog aria-label="Сверка реквизитов"><header><h2></h2><button class="close" type="button">Закрыть</button></header><div class="layout"><div class="info"><div class="fields"></div><button class="reload" type="button">Обновить данные Payee</button><label for="receipt-phone">Телефон получателя из чека</label><input id="receipt-phone" autocomplete="off" placeholder="Вставьте номер из чека"><div class="result" role="status" aria-live="polite"></div><div class="digits"></div><p class="note">Сравниваются только полные номера. Пробелы, +, скобки и дефисы не учитываются. Имя и банк проверьте по чеку вручную.</p></div><div class="receipt"><button class="widen" type="button">Развернуть чек / свойства PDF</button><span class="note">Разверните чек, затем нажмите ⋮ в панели PDF → Document properties.</span><a target="_blank" rel="noopener noreferrer">Открыть чек отдельно ↗</a><span class="note">Если предпросмотр пуст или сайт запрещает его показ, откройте чек отдельно.</span><iframe title="Предпросмотр чека" referrerpolicy="no-referrer"></iframe></div></div></dialog>`;
     const dialog = root.querySelector('dialog');
     root.querySelector('h2').textContent = 'Сверка · Reservation #' + record.reservation;
     const input = root.querySelector('input');
@@ -272,8 +275,15 @@
     input.addEventListener('input', updateResult);
     root.querySelector('a').href = receipt;
     root.querySelector('iframe').src = receipt;
+    root.querySelector('.widen').onclick = () => {
+      const wide = root.querySelector('.layout').classList.toggle('wide');
+      root.querySelector('.widen').textContent = wide ? 'Вернуться к сравнению' : 'Развернуть чек / свойства PDF';
+    };
     renderFields(); document.body.append(host);
-    comparison = {host,dialog,record:JSON.stringify(record)}; dialog.showModal();
+    comparison = {host,dialog,record:JSON.stringify(record), update() {
+      const next = parsePayee(activePanel.innerText);
+      if (JSON.stringify(next) !== JSON.stringify(payee)) { payee = next; renderFields(); }
+    }}; dialog.showModal();
   }
 
   function openComparisonOnly() {
@@ -296,10 +306,9 @@
       const url = backofficeURL(detected);
       const receipt = withReceipt ? receiptURL(activePanel) : null;
       GM_setClipboard(detected.client, 'text');
-      if (receipt) showComparison(detected, receipt);
-      // Append in explicit order: receipt left, Fundist right; keep MovePay selected.
-      if (receipt) GM_openInTab(receipt, {active:false, insert:false, setParent:true});
-      GM_openInTab(url, {active:!withReceipt, insert:!withReceipt, setParent:true});
+      // Insert each tab beside MovePay: Fundist first, then receipt to its left.
+      GM_openInTab(url, {active:!withReceipt, insert:true, setParent:true});
+      if (receipt) GM_openInTab(receipt, {active:false, insert:true, setParent:true});
       ui.status.textContent = 'Client ID copied · opened ' + detected.project + (receipt ? ' · чек и Фундист открыты в фоне' : '');
     } catch (error) { ui.status.textContent = error.message; }
   }
@@ -390,6 +399,8 @@
     mount(); ui.host.hidden = false;
     try {
       current = readReservation();
+      if (comparison && comparison.record !== JSON.stringify(current)) closeComparison();
+      else if (comparison) comparison.update();
       // Keep the input inside the drawer's focus boundary while it is open.
       if (activePanel && ui.host.parentElement !== activePanel) activePanel.append(ui.host);
       const text = `Reservation #${current.reservation} · W ${current.withdrawal} · D ${current.deposit} · User ${current.client} · ${current.project} · Сумма ${current.amount}`;
@@ -407,6 +418,7 @@
       }
     } catch (error) {
       current = null;
+      closeComparison();
       const parent = activePanel || document.body;
       if (ui.host.parentElement !== parent) parent.append(ui.host);
       if (ui.preview.textContent !== error.message) ui.preview.textContent = error.message;
