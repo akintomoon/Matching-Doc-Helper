@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Moon - Matching Helper
 // @namespace    local.movepay.matching
-// @version      2.0.5
+// @version      2.0.6
 // @homepageURL  https://github.com/akintomoon/Matching-Doc-Helper
 // @updateURL    https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
 // @downloadURL  https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
@@ -231,13 +231,44 @@
     previous.dialog.close(); previous.host.remove();
   }
 
+
+  function reviewPage100(value) {
+    const url=new URL(value); url.searchParams.set('size','100'); url.searchParams.set('page','1'); return url.href;
+  }
+  function depositProcessed(text) {
+    const matches=[...text.matchAll(/Processed on\s+(\d{1,2} [A-Za-z]{3} \d{4}) at (\d{2}:\d{2}:\d{2}) UTC/g)];
+    return matches.length===1 ? matches[0][2]+' '+matches[0][1]+' UTC' : null;
+  }
+  function loadDepositTime(record, output) {
+    const frame=document.createElement('iframe');
+    frame.style.cssText='position:fixed;left:-10000px;width:1200px;height:800px;visibility:hidden';
+    frame.title='Loading deposit timestamp';
+    frame.src='/frontoffice/transactions/'+record.deposit;
+    let timer, attempts=0;
+    const cleanup=()=>{clearInterval(timer);frame.remove();};
+    timer=setInterval(()=>{
+      if(!output.isConnected){cleanup();return;}
+      try {
+        const doc=frame.contentDocument;
+        const text=doc?.body?.innerText || '';
+        const url=new URL(frame.contentWindow.location.href);
+        if(url.pathname==='/frontoffice/transactions/'+record.deposit && text.includes(record.deposit)) {
+          const value=depositProcessed(text);
+          if(value){output.textContent=value;cleanup();return;}
+        }
+      } catch (_) {}
+      if(++attempts>=40){output.textContent='Не удалось загрузить — откройте депозит для проверки';cleanup();}
+    },500);
+    document.body.append(frame);
+  }
+
   function showComparison(record, receipt) {
     closeComparison();
     const host = document.createElement('div');
     const root = host.attachShadow({mode:'closed'});
     root.innerHTML = `<style>
       *{box-sizing:border-box}dialog{width:96vw;max-width:96vw;height:86vh;max-height:94vh;border:1px solid #526381;border-radius:12px;padding:16px;background:#202638;color:#eaf0ff;font:15px system-ui}dialog::backdrop{background:#0009}header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}h2{font-size:19px;margin:0}.layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;height:calc(100% - 48px)}.info{overflow:auto}label{display:block;color:#c7d7f1;margin:14px 0 6px}.value{font-size:22px;font-weight:650;overflow-wrap:anywhere}input{width:100%;padding:12px;border:1px solid #71829d;border-radius:7px;font:20px monospace;color:white;background:#131a29}button,a{font:600 14px system-ui}button{cursor:pointer;border:0;border-radius:6px;padding:9px 12px;background:#8bb9ff;color:#111827}a{color:#a8ceff}.result{padding:12px;margin-top:12px;border:1px solid #71829d;border-radius:7px}.result[data-state=match]{color:#80eba4}.result[data-state=different]{color:#ff9ba7}.digits{font:20px monospace;overflow-wrap:anywhere}.digits mark{background:#8a293c;color:white}p{line-height:1.4}.note{font-size:13px;color:#bdcbe1}.layout.wide{grid-template-columns:1fr}.layout.wide .info{display:none}.receipt{min-width:0;display:flex;flex-direction:column;min-height:0;gap:8px}iframe{flex:1;width:100%;min-height:300px;background:white;border:0;border-radius:6px}@media(max-width:750px){.layout{display:flex;flex-direction:column;height:auto}.info{overflow:visible}iframe{height:55vh;flex:auto}}
-    </style><dialog aria-label="Сверка реквизитов"><header><h2></h2><button class="close" type="button">Закрыть</button></header><div class="layout"><div class="info"><div class="fields"></div><button class="reload" type="button">Обновить данные Payee</button><label for="receipt-phone">Телефон получателя из чека</label><input id="receipt-phone" autocomplete="off" placeholder="Вставьте номер из чека"><div class="result" role="status" aria-live="polite"></div><div class="digits"></div><p class="note">Сравниваются только полные номера. Пробелы, +, скобки и дефисы не учитываются. Имя и банк проверьте по чеку вручную.</p></div><div class="receipt"><button class="widen" type="button">Развернуть чек / свойства PDF</button><span class="note">Разверните чек, затем нажмите ⋮ в панели PDF → Document properties.</span><a target="_blank" rel="noopener noreferrer">Открыть чек отдельно ↗</a><span class="note">Если предпросмотр пуст или сайт запрещает его показ, откройте чек отдельно.</span><iframe title="Предпросмотр чека" referrerpolicy="no-referrer"></iframe></div></div></dialog>`;
+    </style><dialog aria-label="Сверка реквизитов"><header><h2></h2><button class="close" type="button">Закрыть</button></header><div class="layout"><div class="info"><div class="fields"></div><label>Processed (UTC) · депозит</label><div class="deposit-time value">Загрузка…</div><button class="reload" type="button">Обновить данные Payee</button><label for="receipt-phone">Телефон получателя из чека</label><input id="receipt-phone" autocomplete="off" placeholder="Вставьте номер из чека"><div class="result" role="status" aria-live="polite"></div><div class="digits"></div><p class="note">Сравниваются только полные номера. Пробелы, +, скобки и дефисы не учитываются. Имя и банк проверьте по чеку вручную.</p></div><div class="receipt"><a target="_blank" rel="noopener noreferrer">Открыть чек отдельно ↗</a><span class="note">Если предпросмотр пуст или сайт запрещает его показ, откройте чек отдельно.</span><iframe title="Предпросмотр чека" referrerpolicy="no-referrer"></iframe></div></div></dialog>`;
     const dialog = root.querySelector('dialog');
     root.querySelector('h2').textContent = 'Сверка · Reservation #' + record.reservation;
     const input = root.querySelector('input');
@@ -275,15 +306,13 @@
     input.addEventListener('input', updateResult);
     root.querySelector('a').href = receipt;
     root.querySelector('iframe').src = receipt;
-    root.querySelector('.widen').onclick = () => {
-      const wide = root.querySelector('.layout').classList.toggle('wide');
-      root.querySelector('.widen').textContent = wide ? 'Вернуться к сравнению' : 'Развернуть чек / свойства PDF';
-    };
+
     renderFields(); document.body.append(host);
     comparison = {host,dialog,record:JSON.stringify(record), update() {
       const next = parsePayee(activePanel.innerText);
       if (JSON.stringify(next) !== JSON.stringify(payee)) { payee = next; renderFields(); }
     }}; dialog.showModal();
+    loadDepositTime(record,root.querySelector('.deposit-time'));
   }
 
   function openComparisonOnly() {
@@ -368,6 +397,25 @@
     finally { busy = false; ui.ticket.disabled = false; refresh(); }
   }
 
+
+  function makeDraggable(host, handle) {
+    handle.style.cursor = 'move'; handle.style.touchAction = 'none';
+    let start;
+    handle.addEventListener('pointerdown', e => {
+      if(e.button !== 0 || e.target.closest('button,input,a')) return;
+      const r=host.getBoundingClientRect(); start={x:e.clientX,y:e.clientY,left:r.left,top:r.top};
+      handle.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    handle.addEventListener('pointermove', e => {
+      if(!start) return;
+      host.style.transform='none';
+      host.style.left=Math.max(0,Math.min(innerWidth-host.offsetWidth,start.left+e.clientX-start.x))+'px';
+      host.style.top=Math.max(0,Math.min(innerHeight-handle.offsetHeight,start.top+e.clientY-start.y))+'px';
+    });
+    handle.addEventListener('pointerup',()=>{start=null;});
+    handle.addEventListener('pointercancel',()=>{start=null;});
+  }
+
   function mount() {
     if (document.getElementById(HOST_ID)) return;
     if (ui) { document.body.append(ui.host); return; }
@@ -380,8 +428,13 @@
       form{display:flex;gap:6px;margin:0} input{flex:1;min-width:0;background:#131a29;color:#fff;border:1px solid #526381;border-radius:6px;padding:8px}
       button{border:0;border-radius:6px;padding:7px 11px;cursor:pointer;font:600 12px system-ui;background:#8bb9ff;color:#111827}button:disabled{opacity:.5;cursor:default}
       .settings{background:#35425a;color:white;padding:7px} .details{display:flex;align-items:center;gap:7px;margin-top:6px;flex-wrap:wrap}.preview{flex:1 1 180px;margin:0;font-size:12px;line-height:1.4;color:#c7d7f1;min-width:0;overflow-wrap:anywhere}.actions{display:flex;gap:6px;flex-wrap:wrap}.fun,.check{flex-shrink:0;font-size:13px;padding:8px 10px}.fun{background:#65d68a;color:#102719}.check{background:#f4cb57;color:#27200a} .status{margin:4px 0 0;font-size:11px;overflow-wrap:anywhere} :focus-visible{outline:2px solid #fff;outline-offset:2px}
-    </style><section aria-label="Save matching ticket"><form><input aria-label="HelpDesk ticket link" placeholder="Paste ticket link…" type="url" required><button class="go" type="submit">GO</button><button class="settings" type="button" title="Connection settings" aria-label="Connection settings">⚙</button></form><div class="details"><p class="preview"></p><div class="actions"><button class="fun" type="button" disabled title="Copy client ID and open backoffice">ФУНДИСТ</button><button class="check" type="button" disabled title="Open receipt and Fundist in background; compare Payee">ПРОВЕРИТЬ</button><button class="compare" type="button" disabled>СВЕРИТЬ</button></div></div><p class="status" role="status" aria-live="polite"></p></section>`;
+    </style><section aria-label="Save matching ticket"><header class="dragbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">Payment reviews <button class="collapse" type="button" aria-label="Свернуть">−</button></header><div class="review-body"><form><input aria-label="HelpDesk ticket link" placeholder="Paste ticket link…" type="url" required><button class="go" type="submit">GO</button><button class="settings" type="button" title="Connection settings" aria-label="Connection settings">⚙</button></form><div class="details"><p class="preview"></p><div class="actions"><button class="fun" type="button" disabled title="Copy client ID and open backoffice">ФУНДИСТ</button><button class="check" type="button" disabled title="Open receipt and Fundist in background; compare Payee">ЧЕК+ФУН</button><button class="compare" type="button" disabled>СВЕРИТЬ</button><span class="rows-group" style="border-left:1px solid #526381;padding-left:8px;margin-left:2px"><button class="rows100" type="button" title="100 строк на странице">100</button></span></div></div><p class="status" role="status" aria-live="polite"></p></div></section>`;
     ui = {host, ticket:root.querySelector('input'), go:root.querySelector('.go'), fun:root.querySelector('.fun'), check:root.querySelector('.check'), compare:root.querySelector('.compare'), preview:root.querySelector('.preview'), status:root.querySelector('.status')};
+    makeDraggable(host,root.querySelector('.dragbar'));
+    root.querySelector('.collapse').onclick = e => {
+      const body=root.querySelector('.review-body'); body.hidden=!body.hidden; e.currentTarget.textContent=body.hidden?'+':'−';
+    };
+    root.querySelector('.rows100').onclick=()=>location.assign(reviewPage100(location.href));
     ui.ticket.value = GM_getValue('draft', '');
     ui.ticket.addEventListener('input', () => GM_setValue('draft', ui.ticket.value));
     root.querySelector('form').addEventListener('submit', e => { e.preventDefault(); save(); });
@@ -629,6 +682,25 @@
     root.append(dlg); dlg.showModal(); fields.fun.focus();
   }
 
+
+  function makeDraggable(host, handle) {
+    handle.style.cursor = 'move'; handle.style.touchAction = 'none';
+    let start;
+    handle.addEventListener('pointerdown', e => {
+      if(e.button !== 0 || e.target.closest('button,input,a')) return;
+      const r=host.getBoundingClientRect(); start={x:e.clientX,y:e.clientY,left:r.left,top:r.top};
+      handle.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    handle.addEventListener('pointermove', e => {
+      if(!start) return;
+      host.style.transform='none';
+      host.style.left=Math.max(0,Math.min(innerWidth-host.offsetWidth,start.left+e.clientX-start.x))+'px';
+      host.style.top=Math.max(0,Math.min(innerHeight-handle.offsetHeight,start.top+e.clientY-start.y))+'px';
+    });
+    handle.addEventListener('pointerup',()=>{start=null;});
+    handle.addEventListener('pointercancel',()=>{start=null;});
+  }
+
   function sync() {
     const onPage = location.pathname === PATH || location.pathname.startsWith(PATH + '/');
     let host = document.getElementById(ID);
@@ -638,6 +710,7 @@
       host.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2147483646;max-width:calc(100vw - 20px)';
       const root = host.attachShadow({mode:'open'});
       root.innerHTML = `<style>${css}</style><section><header>Moon - Matching Helper · Withdrawals</header><div class="body"><div class="group"><div class="caption" title="100 строк на странице">Time</div><div class="row time"></div></div><div class="group"><div class="caption" title="Откройте конкретную заявку">Отмена</div><div class="row cancel"></div></div></div></section>`;
+      makeDraggable(host,root.querySelector('header'));
       button(root.querySelector('header'), '−', e => { const body = root.querySelector('.body'); body.hidden = !body.hidden; e.currentTarget.textContent = body.hidden ? '+' : '−'; });
       for (const [label, action] of [['Вчера','yesterday'],['Сегодня','today'],['Остатки','balance']]) button(root.querySelector('.time'), label, () => location.assign(filterURL(location.href, action)));
       button(root.querySelector('.cancel'), 'Част. Отмена', () => popup(root, 'partial'), 'green');

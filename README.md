@@ -1,8 +1,16 @@
-# Moon - Matching Helper — 2.0.5
+# Moon - Matching Helper — 2.0.6
 
 One Tampermonkey script for Payment reviews → TEST, withdrawal time filters, Jira cancellation drafts, and optional BO VIP checks.
 
-## Updating to 2.0.5
+## Updating to 2.0.6
+
+- Drag either widget by its title bar. Payment reviews now has a collapse button.
+- ЧЕК+ФУН replaces ПРОВЕРИТЬ; the separate 100 button sets review page size while preserving filters.
+- Comparison retains the wide receipt preview without the expand button.
+- Processed (UTC) loads from the deposit transaction in a hidden frame after the comparison panel opens. It is labelled as processed time, not assumed to be creation time. If loading fails, the panel reports it.
+- Update your existing installation and refresh MovePay. Saved connection settings remain unchanged.
+
+## Previous update: 2.0.5
 
 - Fix collapsed Payee selection by clicking its inner label rather than its non-interactive wrapper; retry briefly while it renders. SHOW IN FULL remains automatic.
 - ПРОВЕРИТЬ only opens receipt and Fundist in background tabs next to MovePay (receipt first visually). It no longer opens the comparison panel.
