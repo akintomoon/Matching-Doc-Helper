@@ -1,8 +1,15 @@
-# Moon - Matching Helper — 2.0.6
+# Moon - Matching Helper — 2.0.7
 
-One Tampermonkey script for Payment reviews → TEST, withdrawal time filters, Jira cancellation drafts, and optional BO VIP checks.
+One Tampermonkey script for Payment reviews → your configured Google Sheet, withdrawal time filters, Jira cancellation drafts, and optional BO VIP checks.
 
-## Updating to 2.0.6
+## Updating to 2.0.7
+
+- Support numeric and text withdrawal tokens, including CSC-prefixed tokens, without truncating them. The receiver accepts the same token formats and preserves duplicate detection.
+- СВЕРИТЬ now displays Amount to pay below the Payee information.
+- Update the existing Tampermonkey entry and refresh MovePay. Saved connection settings are preserved. No calculator is included.
+- Receiver owner: if you already deployed the receiver supplied with 2.0.7-beta.1, no further receiver update is needed. Otherwise update the withdrawal validation using Google-Sheets.gs and deploy a new version of the existing deployment. Preserve your TARGET_ID, TARGET_TAB, header configuration, MATCHING_SECRET and /exec URL. Other operators do not need to redeploy or re-enter keys.
+
+## Previous update: 2.0.6
 
 - Drag either widget by its title bar. Payment reviews now has a collapse button.
 - ЧЕК+ФУН replaces ПРОВЕРИТЬ; the separate 100 button sets review page size while preserving filters.

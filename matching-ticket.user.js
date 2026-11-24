@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Moon - Matching Helper
 // @namespace    local.movepay.matching
-// @version      2.0.6
+// @version      2.0.7
 // @homepageURL  https://github.com/akintomoon/Matching-Doc-Helper
 // @updateURL    https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
 // @downloadURL  https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
-// @description  Matching Doc Helper: reservations to TEST, withdrawal filters and Jira cancellation drafts.
+// @description  Matching Doc Helper: reservations to Google Sheets, withdrawal filters and Jira cancellation drafts.
 // @match        https://pub.prod.movepay.online/frontoffice/*
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -93,7 +93,7 @@
     return {
       deposit: field(lines.slice(0, section), 'Deposit', /^\d{1,30}$/),
       amount: normalizeDepositAmount(field(lines.slice(0, section), 'Amount to pay', /^[0-9][0-9\s.,]*(?:\s*RUB|\s*₽)?$/i)),
-      withdrawal: field(details, 'Withdrawal', /^\d{1,30}$/),
+      withdrawal: field(details, 'Withdrawal', /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/),
       client: field(details, 'User ID', /^\d{1,30}$/),
       project: field(details, 'Brand', /^(?![=+@-])[^\r\n\t]{1,100}$/)
     };
@@ -292,6 +292,9 @@
         const value = document.createElement('div'); value.className = 'value'; value.textContent = payee[label] || 'Не удалось прочитать';
         fields.append(caption,value);
       }
+      const amountLabel = document.createElement('label'); amountLabel.textContent = 'Amount to pay';
+      const amountValue = document.createElement('div'); amountValue.className = 'value'; amountValue.textContent = record.amount + ' RUB';
+      fields.append(amountLabel, amountValue);
       updateResult();
     }
     root.querySelector('.reload').onclick = () => {

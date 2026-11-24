@@ -35,7 +35,10 @@ function validateRecord_(data) {
   if (typeof data.ticket !== 'string' || !/^https:\/\/app\.helpdesk\.com\/tickets\/[A-Za-z0-9_-]{1,100}$/.test(data.ticket)) {
     throw new Error('Enter a valid HelpDesk ticket link.');
   }
-  for (const name of ['withdrawal', 'deposit', 'reservation', 'client']) {
+  if (typeof data.withdrawal !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(data.withdrawal)) {
+    throw new Error('Missing or invalid withdrawal token.');
+  }
+  for (const name of ['deposit', 'reservation', 'client']) {
     if (typeof data[name] !== 'string' || !/^\d{1,30}$/.test(data[name])) {
       throw new Error('Missing or invalid ' + name + ' ID.');
     }
