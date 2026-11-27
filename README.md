@@ -1,8 +1,14 @@
-# Moon - Matching Helper — 2.0.7
+# Moon - Matching Helper — 2.0.8
 
 One Tampermonkey script for Payment reviews → your configured Google Sheet, withdrawal time filters, Jira cancellation drafts, and optional BO VIP checks.
 
-## Updating to 2.0.7
+## Updating to 2.0.8
+
+- Withdrawal cancellation drafts now read Approved amount into Actual withdrawal amount, ignoring the difference badge beneath it. Older pages using Paid are still supported.
+- CSC withdrawal tokens use their middle numeric component for the Jira PSP token and transaction link. Both cancellation buttons support these withdrawal pages.
+- Update the existing Tampermonkey script and refresh MovePay. No new Google Apps Script deployment or connection-key entry is needed when updating from 2.0.7.
+
+## Previous update: 2.0.7
 
 - Support numeric and text withdrawal tokens, including CSC-prefixed tokens, without truncating them. The receiver accepts the same token formats and preserves duplicate detection.
 - СВЕРИТЬ now displays Amount to pay below the Payee information.

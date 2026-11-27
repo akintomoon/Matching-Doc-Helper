@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Moon - Matching Helper
 // @namespace    local.movepay.matching
-// @version      2.0.7
+// @version      2.0.8
 // @homepageURL  https://github.com/akintomoon/Matching-Doc-Helper
 // @updateURL    https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
 // @downloadURL  https://raw.githubusercontent.com/akintomoon/Matching-Doc-Helper/main/matching-ticket.user.js
@@ -512,6 +512,22 @@
     if (!host || !/^\d+$/.test(client)) throw new Error('Проверьте Project и Player ID');
     return `https://${host}.boadmin.org/ru/Users/Summary/${client}`;
   }
+  // CSC withdrawal references contain the underlying PSP transaction ID in the middle.
+  function jiraTransactionToken(raw) {
+    const token = String(raw || '').trim().replace(/\s+/g, '');
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(token)) throw new Error('Проверьте Токен PSP');
+    const csc = token.match(/^CSC-(\d+)-(\d+)$/i);
+    return csc ? csc[1] : token;
+  }
+  function withdrawalReference(pathname) {
+    const match = pathname.match(/^\/frontoffice\/matching\/withdrawals\/([^/]+)\/?$/);
+    if (!match) return '';
+    try {
+      const token = decodeURIComponent(match[1]);
+      jiraTransactionToken(token);
+      return token;
+    } catch (_) { return ''; }
+  }
   function vipFromTags(tags) {
     if (!tags.length) return 'None';
     return tags.some(t => t.replace(/[×✕✖]+$/g, '').trim().toUpperCase() === 'VIP') ? 'Yes' : 'No';
@@ -543,6 +559,13 @@
     return cents;
   }
   function amount(cents) { return (cents / 100).toFixed(2).replace(/\.00$/, ''); }
+  function approvedAmount(read) {
+    // Prefer the new field. A difference badge is not part of the amount.
+    const raw = read('Approved amount') || read('Paid');
+    const match = String(raw || '').trim().match(/^(\d[\d ,.\u00a0\u202f]*\s*(?:RUB|₽))(?=\s|$)/i);
+    const value = match ? match[1] : String(raw || '').trim();
+    try { return amount(money(value)); } catch (_) { return ''; }
+  }
   function dateValue(raw, now = new Date()) {
     const pad = n => String(n).padStart(2, '0');
     if (/^(Yesterday|Today|Вчера|Сегодня)(?:\s|$)/i.test(raw)) {
@@ -596,15 +619,16 @@
   }
   function popup(root, action) {
     root.querySelector('dialog')?.remove();
-    const withdrawal = location.pathname.match(/\/withdrawals\/(\d+)\/?$/)?.[1];
+    const withdrawal = withdrawalReference(location.pathname);
     if (!withdrawal) return;
+    const transaction = jiraTransactionToken(withdrawal);
     const dlg = document.createElement('dialog');
     dlg.innerHTML = `<form><header>${action === 'partial' ? 'Част. Отмена' : 'Полная Отмена'}</header><p>Проверьте данные. Скопируйте Merchant Transaction ID из транзакции в Токен ФУН.</p><a target="_blank" rel="noopener">Открыть транзакцию ↗</a><div class="grid"></div><pre></pre><p class="status" role="status"></p><div class="row"></div></form>`;
-    dlg.querySelector('a').href = location.origin + '/frontoffice/transactions/' + withdrawal;
+    dlg.querySelector('a').href = location.origin + '/frontoffice/transactions/' + encodeURIComponent(transaction);
     const fields = {};
-    const rawAmount = readLabel('Amount'), rawPaid = readLabel('Paid');
+    const rawAmount = readLabel('Amount'), paidAmount = approvedAmount(readLabel);
     const cleanMoney = s => { try { return amount(money(s)); } catch { return ''; } };
-    const specs = [['client','Player ID',readLabel('User ID')],['project','Project / Brand',readLabel('Brand')],['created','Дата заявки',dateValue(readLabel('Created')),'date'],['requested',action === 'full' ? 'Withdrawal Amount' : 'Requested withdrawal amount',cleanMoney(rawAmount)],...(action === 'partial' ? [['paid','Actual withdrawal amount',cleanMoney(rawPaid)]] : []),['psp','Токен PSP',readLabel('Transaction') || withdrawal],['fun','Токен ФУН / Merchant Transaction ID','']];
+    const specs = [['client','Player ID',readLabel('User ID')],['project','Project / Brand',readLabel('Brand')],['created','Дата заявки',dateValue(readLabel('Created')),'date'],['requested',action === 'full' ? 'Withdrawal Amount' : 'Requested withdrawal amount',cleanMoney(rawAmount)],...(action === 'partial' ? [['paid','Actual withdrawal amount',paidAmount]] : []),['psp','Токен PSP',transaction],['fun','Токен ФУН / Merchant Transaction ID','']];
     for (const [key, title, value, type] of specs) {
       const label = document.createElement('label'); label.textContent = title;
       const input = document.createElement('input'); input.type = type || 'text'; input.value = value; input.required = true;
@@ -651,8 +675,9 @@
       const d = Object.fromEntries(Object.entries(fields).map(([k, el]) => [k, el.value.trim()]));
       d.project = PROJECTS.find(p => p.toLowerCase() === normalizeProject(d.project)) || d.project;
       d.method = PM_TAG;
-      if (!/^\d+$/.test(d.client) || !/^\d+$/.test(d.psp)) throw new Error('Проверьте Player ID и Токен PSP');
-      if (d.psp !== withdrawal) throw new Error('Токен PSP не совпадает с открытой заявкой');
+      if (!/^\d+$/.test(d.client)) throw new Error('Проверьте Player ID');
+      d.psp = jiraTransactionToken(d.psp);
+      if (d.psp !== transaction) throw new Error('Токен PSP не совпадает с открытой заявкой');
       if (!PROJECTS.includes(d.project)) throw new Error('Неизвестный Project / Brand');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d.created)) throw new Error('Укажите дату создания');
       if (!d.fun) throw new Error('Укажите Токен ФУН');
@@ -675,7 +700,7 @@
     dlg.querySelector('form').addEventListener('submit', e => {
       e.preventDefault();
       try {
-        if (location.pathname.match(/\/withdrawals\/(\d+)\/?$/)?.[1] !== withdrawal) throw new Error('Заявка изменилась. Откройте окно заново.');
+        if (withdrawalReference(location.pathname) !== withdrawal) throw new Error('Заявка изменилась. Откройте окно заново.');
         const d = collect(); const nonce = crypto.randomUUID();
         GM_setValue('matching-draft-' + nonce, d);
         GM_openInTab('https://tasks.deltasystem.tech/servicedesk/customer/portal/22/create/' + (action === 'partial' ? '894' : '1170') + '#matching-draft=' + nonce, {active:true});
@@ -720,7 +745,7 @@
       button(root.querySelector('.cancel'), 'Полная Отмена', () => popup(root, 'full'), 'red');
       document.body.append(host);
     }
-    host.shadowRoot.querySelectorAll('.cancel button').forEach(b => { b.disabled = !/\/withdrawals\/\d+\/?$/.test(location.pathname); });
+    host.shadowRoot.querySelectorAll('.cancel button').forEach(b => { b.disabled = !withdrawalReference(location.pathname); });
   }
 
   function cleanLabel(s) {
